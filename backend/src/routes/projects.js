@@ -1,0 +1,11 @@
+import express from 'express';
+import Project from '../models/Project.js';
+import User from '../models/User.js';
+import {auth} from '../middleware/auth.js';
+const r=express.Router(); r.use(auth);
+const member=async(id,userId)=>Project.exists({_id:id,$or:[{owner:userId},{members:userId}]});
+r.get('/',async(req,res,next)=>{try{const items=await Project.find({$or:[{owner:req.user.sub},{members:req.user.sub}]}).select('name description owner members createdAt').sort({createdAt:-1}).lean();res.json({items})}catch(e){next(e)}});
+r.post('/',async(req,res,next)=>{try{const p=await Project.create({name:req.body.name,description:req.body.description||'',owner:req.user.sub,members:[req.user.sub]});res.status(201).json({item:p})}catch(e){next(e)}});
+r.post('/:id/members',async(req,res,next)=>{try{const p=await Project.findOne({_id:req.params.id,owner:req.user.sub});if(!p)return res.status(403).json({message:'Only owner can add members'});const u=await User.findOne({email:req.body.email});if(!u)return res.status(404).json({message:'User not found'});if(!p.members.some(x=>x.equals(u._id)))p.members.push(u._id);await p.save();res.json({item:p})}catch(e){next(e)}});
+r.get('/:id',async(req,res,next)=>{try{if(!(await member(req.params.id,req.user.sub)))return res.status(403).json({message:'Project access denied'});const p=await Project.findById(req.params.id).populate('members','name email').lean();res.json({item:p})}catch(e){next(e)}});
+export default r;
