@@ -1,0 +1,11 @@
+import express from 'express';
+import Task from '../models/Task.js';
+import Project from '../models/Project.js';
+import {auth} from '../middleware/auth.js';
+import {io} from '../server.js';
+const r=express.Router();r.use(auth);
+const access=async(project,user)=>Project.exists({_id:project,$or:[{owner:user},{members:user}]});
+r.get('/',async(req,res,next)=>{try{if(!(await access(req.query.project,req.user.sub)))return res.status(403).json({message:'Project access denied'});const page=Math.max(1,Number(req.query.page)||1),limit=Math.min(50,Math.max(1,Number(req.query.limit)||20));const filter={project:req.query.project};if(req.query.status)filter.status=req.query.status;const items=await Task.find(filter).populate('assignee','name email').sort({createdAt:-1}).skip((page-1)*limit).limit(limit).lean();res.json({items,page,limit})}catch(e){next(e)}});
+r.post('/',async(req,res,next)=>{try{const {project,title,description,status,priority,assignee}=req.body;if(!project||!title)return res.status(400).json({message:'Project and title required'});if(!(await access(project,req.user.sub)))return res.status(403).json({message:'Project access denied'});const item=await Task.create({project,title,description,status,priority,assignee,createdBy:req.user.sub});io.to(`project:${project}`).emit('task:created',item);res.status(201).json({item})}catch(e){next(e)}});
+r.patch('/:id',async(req,res,next)=>{try{const old=await Task.findById(req.params.id);if(!old||!(await access(old.project,req.user.sub)))return res.status(404).json({message:'Task not found'});const allowed=['title','description','status','priority','assignee'];const update={};for(const k of allowed)if(req.body[k]!==undefined)update[k]=req.body[k];const item=await Task.findByIdAndUpdate(req.params.id,update,{new:true,runValidators:true}).populate('assignee','name email').lean();io.to(`project:${item.project}`).emit('task:updated',item);res.json({item})}catch(e){next(e)}});
+export default r;
