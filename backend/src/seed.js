@@ -1,0 +1,13 @@
+import 'dotenv/config';
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import User from './models/User.js';
+import Project from './models/Project.js';
+import Task from './models/Task.js';
+await mongoose.connect(process.env.MONGO_URI);
+const password=await bcrypt.hash('Admin@123',12);
+const user=await User.findOneAndUpdate({email:'demo@collabboard.local'},{name:'Demo User',email:'demo@collabboard.local',password,role:'admin'},{upsert:true,new:true});
+let project=await Project.findOne({name:'Demo Project',owner:user._id});
+if(!project) project=await Project.create({name:'Demo Project',description:'Learn real-time collaboration',owner:user._id,members:[user._id]});
+if(!(await Task.exists({project:project._id}))) await Task.create([{project:project._id,title:'Learn REST API',status:'done',priority:'high',createdBy:user._id},{project:project._id,title:'Learn Socket.IO',status:'doing',priority:'medium',createdBy:user._id},{project:project._id,title:'Build UI',status:'todo',priority:'low',createdBy:user._id}]);
+console.log('Demo login: demo@collabboard.local / Admin@123');await mongoose.disconnect();
